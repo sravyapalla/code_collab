@@ -15,12 +15,20 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+.logs/
 
 # Editor and OS files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+# TypeScript build metadata
+*.tsbuildinfo
+
+# Generated config output
+frontend/vite.config.js
+frontend/vite.config.d.ts
 
 # Keep the reference project out of this repo.
 smart-code-lab-main/
