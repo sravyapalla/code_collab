@@ -22,6 +22,10 @@ function createGuestName(): string {
   return `Guest-${Math.floor(Math.random() * 900 + 100)}`;
 }
 
+function createRoomId(): string {
+  return `room-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export default function App() {
   const [roomInput, setRoomInput] = useState("demo-room");
   const [roomId, setRoomId] = useState("");
@@ -30,6 +34,7 @@ export default function App() {
   const [language, setLanguage] = useState("javascript");
   const [users, setUsers] = useState<string[]>([]);
   const [status, setStatus] = useState("Disconnected");
+  const [copiedRoom, setCopiedRoom] = useState(false);
 
   const socket: Socket = useMemo(() => {
     return io(backendUrl, {
@@ -82,6 +87,7 @@ export default function App() {
 
     setRoomId(nextRoomId);
     setUserName(nextUserName);
+    setCopiedRoom(false);
 
     if (!socket.connected) {
       socket.connect();
@@ -91,6 +97,37 @@ export default function App() {
       roomId: nextRoomId,
       userName: nextUserName
     });
+  }
+
+  function leaveRoom() {
+    socket.emit("leave-room");
+    socket.disconnect();
+    setRoomId("");
+    setUsers([]);
+    setStatus("Disconnected");
+    setCode("// Join a room to start coding together.\n");
+    setLanguage("javascript");
+    setCopiedRoom(false);
+  }
+
+  function useRandomRoom() {
+    const nextRoomId = createRoomId();
+    setRoomInput(nextRoomId);
+    setCopiedRoom(false);
+  }
+
+  async function copyRoomId() {
+    if (!roomId) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(roomId);
+      setCopiedRoom(true);
+      window.setTimeout(() => setCopiedRoom(false), 1500);
+    } catch {
+      setStatus("Could not copy room ID.");
+    }
   }
 
   function updateCode(nextCode: string | undefined) {
@@ -149,12 +186,29 @@ export default function App() {
               />
             </label>
 
-            <button type="submit">Join Room</button>
+            <div className="button-row">
+              <button type="submit">{roomId ? "Switch Room" : "Join Room"}</button>
+              <button type="button" className="secondary-button" onClick={useRandomRoom}>
+                New ID
+              </button>
+            </div>
           </form>
 
           <div className="panel">
             <h2>Room</h2>
-            <p>{roomId || "Not joined yet"}</p>
+            <div className="room-row">
+              <p>{roomId || "Not joined yet"}</p>
+              {roomId ? (
+                <button type="button" className="small-button" onClick={copyRoomId}>
+                  {copiedRoom ? "Copied" : "Copy"}
+                </button>
+              ) : null}
+            </div>
+            {roomId ? (
+              <button type="button" className="secondary-button full-button" onClick={leaveRoom}>
+                Leave Room
+              </button>
+            ) : null}
           </div>
 
           <div className="panel">
@@ -183,6 +237,12 @@ export default function App() {
         </aside>
 
         <section className="editor-wrap">
+          {!roomId ? (
+            <div className="empty-state">
+              <h2>Join a room to start editing</h2>
+              <p>Use the demo room or generate a new room ID to collaborate.</p>
+            </div>
+          ) : null}
           <Editor
             height="100%"
             theme="vs-dark"
@@ -190,6 +250,7 @@ export default function App() {
             value={code}
             onChange={updateCode}
             options={{
+              readOnly: !roomId,
               minimap: { enabled: false },
               fontSize: 15,
               wordWrap: "on",

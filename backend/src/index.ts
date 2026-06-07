@@ -61,14 +61,55 @@ function broadcastUsers(roomId: string): void {
   io.to(roomId).emit("users-changed", getRoomUsers(roomId));
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isJoinRoomPayload(value: unknown): value is JoinRoomPayload {
+  return (
+    isRecord(value) &&
+    typeof value.roomId === "string" &&
+    typeof value.userName === "string"
+  );
+}
+
+function cleanupSocketRoom(socketId: string, roomId: string | undefined): void {
+  if (!roomId) {
+    return;
+  }
+
+  const roomUsers = usersByRoom.get(roomId);
+  roomUsers?.delete(socketId);
+
+  if (!roomUsers || roomUsers.size === 0) {
+    usersByRoom.delete(roomId);
+    return;
+  }
+
+  broadcastUsers(roomId);
+}
+
 io.on("connection", (socket) => {
-  socket.on("join-room", ({ roomId, userName }: JoinRoomPayload) => {
+  socket.on("join-room", (payload: unknown) => {
+    if (!isJoinRoomPayload(payload)) {
+      socket.emit("error-message", "Room ID and name are required.");
+      return;
+    }
+
+    const { roomId, userName } = payload;
     const cleanRoomId = roomId.trim();
     const cleanUserName = userName.trim() || "Guest";
 
     if (!cleanRoomId) {
       socket.emit("error-message", "Room ID is required.");
       return;
+    }
+
+    const previousRoomId = socket.data.roomId as string | undefined;
+
+    if (previousRoomId && previousRoomId !== cleanRoomId) {
+      socket.leave(previousRoomId);
+      cleanupSocketRoom(socket.id, previousRoomId);
     }
 
     socket.join(cleanRoomId);
@@ -89,34 +130,41 @@ io.on("connection", (socket) => {
     broadcastUsers(cleanRoomId);
   });
 
-  socket.on("code-change", ({ roomId, code }: { roomId: string; code: string }) => {
+  socket.on("code-change", (payload: unknown) => {
+    if (!isRecord(payload) || typeof payload.roomId !== "string" || typeof payload.code !== "string") {
+      socket.emit("error-message", "Code update is invalid.");
+      return;
+    }
+
+    const { roomId, code } = payload;
     const room = getRoom(roomId);
     room.code = code;
     socket.to(roomId).emit("code-change", code);
   });
 
-  socket.on("language-change", ({ roomId, language }: { roomId: string; language: string }) => {
+  socket.on("language-change", (payload: unknown) => {
+    if (!isRecord(payload) || typeof payload.roomId !== "string" || typeof payload.language !== "string") {
+      socket.emit("error-message", "Language update is invalid.");
+      return;
+    }
+
+    const { roomId, language } = payload;
     const room = getRoom(roomId);
     room.language = language;
     socket.to(roomId).emit("language-change", language);
   });
 
+  socket.on("leave-room", () => {
+    const roomId = socket.data.roomId as string | undefined;
+    socket.leave(roomId ?? "");
+    cleanupSocketRoom(socket.id, roomId);
+    socket.data.roomId = undefined;
+    socket.data.userName = undefined;
+  });
+
   socket.on("disconnect", () => {
     const roomId = socket.data.roomId as string | undefined;
-
-    if (!roomId) {
-      return;
-    }
-
-    const roomUsers = usersByRoom.get(roomId);
-    roomUsers?.delete(socket.id);
-
-    if (roomUsers?.size === 0) {
-      usersByRoom.delete(roomId);
-      return;
-    }
-
-    broadcastUsers(roomId);
+    cleanupSocketRoom(socket.id, roomId);
   });
 });
 

@@ -150,6 +150,42 @@ button:hover {
   background: #93c5fd;
 }
 
+.button-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.secondary-button,
+.small-button {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #e2e8f0;
+  background: #111827;
+}
+
+.secondary-button:hover,
+.small-button:hover {
+  background: #1f2937;
+}
+
+.small-button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.full-button {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.room-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .panel p {
   color: #e2e8f0;
   overflow-wrap: anywhere;
@@ -171,8 +207,32 @@ button:hover {
 }
 
 .editor-wrap {
+  position: relative;
   min-width: 0;
   min-height: calc(100vh - 88px);
+}
+
+.empty-state {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  pointer-events: none;
+  background: rgba(16, 20, 24, 0.7);
+}
+
+.empty-state h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #f8fafc;
+}
+
+.empty-state p {
+  color: #cbd5e1;
 }
 
 @media (max-width: 800px) {
