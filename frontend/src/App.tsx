@@ -9,6 +9,15 @@ type RoomStatePayload = {
 };
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
+const defaultCode = "// Join a room to start coding together.\n";
+const defaultRoomId = "demo-room";
+const defaultLanguage = "javascript";
+
+const storageKeys = {
+  language: "code-collab:language",
+  roomId: "code-collab:room-id",
+  userName: "code-collab:user-name"
+};
 
 const languageOptions = [
   "javascript",
@@ -26,15 +35,55 @@ function createRoomId(): string {
   return `room-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function readStorage(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Local storage can be unavailable in restrictive browser contexts.
+  }
+}
+
+function getInitialRoomId(): string {
+  const sharedRoomId = new URLSearchParams(window.location.search).get("room")?.trim();
+  return sharedRoomId || readStorage(storageKeys.roomId, defaultRoomId);
+}
+
+function createRoomLink(roomId: string): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", roomId);
+  return url.toString();
+}
+
+function updateRoomUrl(roomId: string | null): void {
+  const url = new URL(window.location.href);
+
+  if (roomId) {
+    url.searchParams.set("room", roomId);
+  } else {
+    url.searchParams.delete("room");
+  }
+
+  window.history.replaceState({}, "", url);
+}
+
 export default function App() {
-  const [roomInput, setRoomInput] = useState("demo-room");
+  const [roomInput, setRoomInput] = useState(getInitialRoomId);
   const [roomId, setRoomId] = useState("");
-  const [userName, setUserName] = useState(createGuestName);
-  const [code, setCode] = useState("// Join a room to start coding together.\n");
-  const [language, setLanguage] = useState("javascript");
+  const [userName, setUserName] = useState(() => readStorage(storageKeys.userName, createGuestName()));
+  const [code, setCode] = useState(defaultCode);
+  const [language, setLanguage] = useState(() => readStorage(storageKeys.language, defaultLanguage));
   const [users, setUsers] = useState<string[]>([]);
   const [status, setStatus] = useState("Disconnected");
-  const [copiedRoom, setCopiedRoom] = useState(false);
+  const [copiedRoomId, setCopiedRoomId] = useState(false);
+  const [copiedRoomLink, setCopiedRoomLink] = useState(false);
 
   const socket: Socket = useMemo(() => {
     return io(backendUrl, {
@@ -45,11 +94,13 @@ export default function App() {
   useEffect(() => {
     socket.on("connect", () => setStatus("Connected"));
     socket.on("disconnect", () => setStatus("Disconnected"));
+    socket.on("connect_error", () => setStatus("Connection failed"));
 
     socket.on("room-state", ({ code: nextCode, language: nextLanguage, users: nextUsers }: RoomStatePayload) => {
       setCode(nextCode);
       setLanguage(nextLanguage);
       setUsers(nextUsers);
+      setStatus("Room joined");
     });
 
     socket.on("code-change", (nextCode: string) => {
@@ -74,6 +125,20 @@ export default function App() {
     };
   }, [socket]);
 
+  useEffect(() => {
+    writeStorage(storageKeys.userName, userName);
+  }, [userName]);
+
+  useEffect(() => {
+    writeStorage(storageKeys.language, language);
+  }, [language]);
+
+  useEffect(() => {
+    if (roomInput.trim()) {
+      writeStorage(storageKeys.roomId, roomInput.trim());
+    }
+  }, [roomInput]);
+
   function joinRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -87,7 +152,11 @@ export default function App() {
 
     setRoomId(nextRoomId);
     setUserName(nextUserName);
-    setCopiedRoom(false);
+    setStatus(socket.connected ? "Joining room" : "Connecting");
+    setCopiedRoomId(false);
+    setCopiedRoomLink(false);
+    writeStorage(storageKeys.roomId, nextRoomId);
+    updateRoomUrl(nextRoomId);
 
     if (!socket.connected) {
       socket.connect();
@@ -105,15 +174,17 @@ export default function App() {
     setRoomId("");
     setUsers([]);
     setStatus("Disconnected");
-    setCode("// Join a room to start coding together.\n");
-    setLanguage("javascript");
-    setCopiedRoom(false);
+    setCode(defaultCode);
+    setCopiedRoomId(false);
+    setCopiedRoomLink(false);
+    updateRoomUrl(null);
   }
 
   function useRandomRoom() {
     const nextRoomId = createRoomId();
     setRoomInput(nextRoomId);
-    setCopiedRoom(false);
+    setCopiedRoomId(false);
+    setCopiedRoomLink(false);
   }
 
   async function copyRoomId() {
@@ -123,10 +194,24 @@ export default function App() {
 
     try {
       await navigator.clipboard.writeText(roomId);
-      setCopiedRoom(true);
-      window.setTimeout(() => setCopiedRoom(false), 1500);
+      setCopiedRoomId(true);
+      window.setTimeout(() => setCopiedRoomId(false), 1500);
     } catch {
       setStatus("Could not copy room ID.");
+    }
+  }
+
+  async function copyRoomLink() {
+    if (!roomId) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(createRoomLink(roomId));
+      setCopiedRoomLink(true);
+      window.setTimeout(() => setCopiedRoomLink(false), 1500);
+    } catch {
+      setStatus("Could not copy room link.");
     }
   }
 
@@ -144,6 +229,7 @@ export default function App() {
 
   function updateLanguage(nextLanguage: string) {
     setLanguage(nextLanguage);
+    writeStorage(storageKeys.language, nextLanguage);
 
     if (roomId) {
       socket.emit("language-change", {
@@ -199,9 +285,14 @@ export default function App() {
             <div className="room-row">
               <p>{roomId || "Not joined yet"}</p>
               {roomId ? (
-                <button type="button" className="small-button" onClick={copyRoomId}>
-                  {copiedRoom ? "Copied" : "Copy"}
-                </button>
+                <div className="room-actions">
+                  <button type="button" className="small-button" onClick={copyRoomId}>
+                    {copiedRoomId ? "Copied" : "Copy ID"}
+                  </button>
+                  <button type="button" className="small-button" onClick={copyRoomLink}>
+                    {copiedRoomLink ? "Copied" : "Copy Link"}
+                  </button>
+                </div>
               ) : null}
             </div>
             {roomId ? (

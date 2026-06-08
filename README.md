@@ -2,7 +2,7 @@
 
 Code Collab is a small real-time collaborative code editor. Users can join the same room and edit code together live.
 
-This is the basic version of the project. It intentionally keeps the stack small so the core idea is easy to understand before adding authentication, persistence, AI, code execution, Redis, or deployment features.
+This version intentionally keeps the stack small so the core collaboration flow is easy to understand before adding authentication, persistence, AI, code execution, Redis, or deployment features.
 
 ## Tech Stack
 
@@ -17,10 +17,10 @@ This is the basic version of the project. It intentionally keeps the stack small
 
 ```txt
 code-collab/
-├── backend/     # Express + Socket.IO server
-├── frontend/    # React + Vite editor UI
-├── README.md
-└── .gitignore
++-- backend/     # Express + Socket.IO server
++-- frontend/    # React + Vite editor UI
++-- README.md
++-- .gitignore
 ```
 
 ## Features
@@ -30,6 +30,11 @@ code-collab/
 - Sync code changes live between users in the same room
 - Show connected users
 - Change language mode for the editor
+- Generate a room ID
+- Copy the active room ID
+- Copy a shareable room link
+- Open a shared room link with `?room=room-id`
+- Remember your last name, room, and language in the browser
 
 ## Local Setup
 
@@ -56,6 +61,16 @@ Open:
 ```txt
 http://localhost:5173
 ```
+
+## Sharing a Room
+
+After joining a room, use **Copy Link** to share a URL like:
+
+```txt
+http://localhost:5173/?room=demo-room
+```
+
+Opening that link pre-fills the room ID so another user can join the same room quickly.
 
 ## Environment Variables
 
