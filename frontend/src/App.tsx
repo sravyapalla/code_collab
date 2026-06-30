@@ -1,4 +1,4 @@
-import { Editor } from "@monaco-editor/react";
+import { Editor, type OnMount } from "@monaco-editor/react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
@@ -6,6 +6,32 @@ type RoomStatePayload = {
   code: string;
   language: string;
   users: string[];
+};
+
+type AiMode = "ask" | "explain" | "debug" | "review" | "tests" | "refactor";
+
+type AiCitation = {
+  chunkId: string;
+  language: string;
+  startLine: number;
+  endLine: number;
+  preview: string;
+};
+
+type AiMessage = {
+  id: string;
+  roomId: string;
+  role: "user" | "assistant";
+  mode: AiMode;
+  content: string;
+  citations: AiCitation[];
+  userName?: string;
+  createdAt: string;
+};
+
+type SseEvent = {
+  event: string;
+  data: unknown;
 };
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
@@ -19,12 +45,15 @@ const storageKeys = {
   userName: "code-collab:user-name"
 };
 
-const languageOptions = [
-  "javascript",
-  "typescript",
-  "python",
-  "cpp",
-  "java"
+const languageOptions = ["javascript", "typescript", "python", "cpp", "java"];
+
+const aiModes: Array<{ value: AiMode; label: string }> = [
+  { value: "ask", label: "Ask" },
+  { value: "explain", label: "Explain" },
+  { value: "debug", label: "Debug" },
+  { value: "review", label: "Review" },
+  { value: "tests", label: "Tests" },
+  { value: "refactor", label: "Refactor" }
 ];
 
 function createGuestName(): string {
@@ -74,6 +103,53 @@ function updateRoomUrl(roomId: string | null): void {
   window.history.replaceState({}, "", url);
 }
 
+function extractFirstCodeBlock(content: string): string {
+  const match = content.match(/```[\w-]*\n([\s\S]*?)```/);
+  return (match?.[1] ?? content).trim();
+}
+
+function formatAiMode(mode: AiMode): string {
+  return aiModes.find((option) => option.value === mode)?.label ?? "Ask";
+}
+
+function parseSseBuffer(buffer: string, onEvent: (event: SseEvent) => void): string {
+  const normalizedBuffer = buffer.replace(/\r\n/g, "\n");
+  const parts = normalizedBuffer.split("\n\n");
+  const remainder = parts.pop() ?? "";
+
+  for (const part of parts) {
+    const lines = part.split("\n");
+    let eventName = "message";
+    const dataLines: string[] = [];
+
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        eventName = line.slice("event:".length).trim();
+      }
+
+      if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trim());
+      }
+    }
+
+    const rawData = dataLines.join("\n");
+
+    try {
+      onEvent({
+        event: eventName,
+        data: JSON.parse(rawData)
+      });
+    } catch {
+      onEvent({
+        event: eventName,
+        data: rawData
+      });
+    }
+  }
+
+  return remainder;
+}
+
 export default function App() {
   const [roomInput, setRoomInput] = useState(getInitialRoomId);
   const [roomId, setRoomId] = useState("");
@@ -84,6 +160,13 @@ export default function App() {
   const [status, setStatus] = useState("Disconnected");
   const [copiedRoomId, setCopiedRoomId] = useState(false);
   const [copiedRoomLink, setCopiedRoomLink] = useState(false);
+  const [aiMode, setAiMode] = useState<AiMode>("ask");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+  const [aiStatus, setAiStatus] = useState("Join a room to use AI");
+  const [isAiStreaming, setIsAiStreaming] = useState(false);
+  const [selectedCode, setSelectedCode] = useState("");
+  const [previewCode, setPreviewCode] = useState("");
 
   const socket: Socket = useMemo(() => {
     return io(backendUrl, {
@@ -139,6 +222,38 @@ export default function App() {
     }
   }, [roomInput]);
 
+  useEffect(() => {
+    if (!roomId) {
+      setAiMessages([]);
+      setAiStatus("Join a room to use AI");
+      return;
+    }
+
+    const abortController = new AbortController();
+
+    fetch(`${backendUrl}/api/rooms/${encodeURIComponent(roomId)}/ai/messages`, {
+      signal: abortController.signal
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Could not load AI history.");
+        }
+
+        return response.json() as Promise<{ messages: AiMessage[] }>;
+      })
+      .then(({ messages }) => {
+        setAiMessages(messages);
+        setAiStatus(messages.length > 0 ? "AI history loaded" : "Ask about this room");
+      })
+      .catch((error: unknown) => {
+        if (!abortController.signal.aborted) {
+          setAiStatus(error instanceof Error ? error.message : "Could not load AI history.");
+        }
+      });
+
+    return () => abortController.abort();
+  }, [roomId]);
+
   function joinRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -155,6 +270,7 @@ export default function App() {
     setStatus(socket.connected ? "Joining room" : "Connecting");
     setCopiedRoomId(false);
     setCopiedRoomLink(false);
+    setPreviewCode("");
     writeStorage(storageKeys.roomId, nextRoomId);
     updateRoomUrl(nextRoomId);
 
@@ -175,6 +291,9 @@ export default function App() {
     setUsers([]);
     setStatus("Disconnected");
     setCode(defaultCode);
+    setAiMessages([]);
+    setAiPrompt("");
+    setPreviewCode("");
     setCopiedRoomId(false);
     setCopiedRoomLink(false);
     updateRoomUrl(null);
@@ -239,16 +358,143 @@ export default function App() {
     }
   }
 
+  const handleEditorMount: OnMount = (editor) => {
+    const refreshSelection = () => {
+      const selection = editor.getSelection();
+      const model = editor.getModel();
+
+      if (!selection || !model) {
+        setSelectedCode("");
+        return;
+      }
+
+      setSelectedCode(model.getValueInRange(selection).slice(0, 8000));
+    };
+
+    refreshSelection();
+    editor.onDidChangeCursorSelection(refreshSelection);
+  };
+
+  async function sendAiMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const cleanPrompt = aiPrompt.trim();
+
+    if (!roomId || !cleanPrompt || isAiStreaming) {
+      return;
+    }
+
+    setIsAiStreaming(true);
+    setAiStatus("AI is thinking");
+    setAiPrompt("");
+
+    const activeAssistantId = { current: "" };
+
+    function handleSseEvent(sseEvent: SseEvent) {
+      if (sseEvent.event === "user-message" && typeof sseEvent.data === "object" && sseEvent.data) {
+        setAiMessages((messages) => [...messages, sseEvent.data as AiMessage]);
+      }
+
+      if (sseEvent.event === "assistant-start" && typeof sseEvent.data === "object" && sseEvent.data) {
+        const message = sseEvent.data as AiMessage;
+        activeAssistantId.current = message.id;
+        setAiMessages((messages) => [...messages, message]);
+      }
+
+      if (
+        sseEvent.event === "token" &&
+        typeof sseEvent.data === "object" &&
+        sseEvent.data &&
+        "delta" in sseEvent.data
+      ) {
+        const delta = String((sseEvent.data as { delta: string }).delta);
+        setAiMessages((messages) =>
+          messages.map((message) =>
+            message.id === activeAssistantId.current
+              ? {
+                  ...message,
+                  content: `${message.content}${delta}`
+                }
+              : message
+          )
+        );
+      }
+
+      if (sseEvent.event === "done" && typeof sseEvent.data === "object" && sseEvent.data) {
+        const message = sseEvent.data as AiMessage;
+        setAiMessages((messages) => messages.map((item) => (item.id === message.id ? message : item)));
+        setAiStatus("AI response ready");
+      }
+
+      if (sseEvent.event === "error" && typeof sseEvent.data === "object" && sseEvent.data && "message" in sseEvent.data) {
+        setAiStatus(String((sseEvent.data as { message: string }).message));
+      }
+    }
+
+    try {
+      const response = await fetch(`${backendUrl}/api/rooms/${encodeURIComponent(roomId)}/ai/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: cleanPrompt,
+          mode: aiMode,
+          selection: selectedCode,
+          userName
+        })
+      });
+
+      if (!response.ok || !response.body) {
+        const errorPayload = await response.json().catch(() => ({ message: "AI request failed." }));
+        throw new Error(String(errorPayload.message ?? "AI request failed."));
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let isDone = false;
+
+      while (!isDone) {
+        const readResult = await reader.read();
+        isDone = readResult.done;
+        buffer += decoder.decode(readResult.value ?? new Uint8Array(), { stream: !isDone });
+        buffer = parseSseBuffer(buffer, handleSseEvent);
+      }
+
+      if (buffer.trim()) {
+        parseSseBuffer(`${buffer}\n\n`, handleSseEvent);
+      }
+    } catch (error) {
+      setAiStatus(error instanceof Error ? error.message : "AI request failed.");
+      setAiPrompt(cleanPrompt);
+    } finally {
+      setIsAiStreaming(false);
+    }
+  }
+
+  function previewAssistantCode(message: AiMessage) {
+    setPreviewCode(extractFirstCodeBlock(message.content));
+  }
+
+  function insertPreviewCode() {
+    if (!previewCode) {
+      return;
+    }
+
+    updateCode(previewCode);
+    setPreviewCode("");
+    setAiStatus("Inserted AI suggestion into the editor");
+  }
+
   return (
     <main className="app-shell">
       <section className="topbar">
         <div>
           <p className="eyebrow">Code Collab</p>
-          <h1>Real-time code rooms</h1>
+          <h1>AI-assisted code rooms</h1>
         </div>
-        <span className={socket.connected ? "status online" : "status"}>
-          {status}
-        </span>
+        <span className={socket.connected ? "status online" : "status"}>{status}</span>
       </section>
 
       <section className="workspace">
@@ -256,20 +502,12 @@ export default function App() {
           <form onSubmit={joinRoom} className="join-form">
             <label>
               Your name
-              <input
-                value={userName}
-                onChange={(event) => setUserName(event.target.value)}
-                placeholder="Your name"
-              />
+              <input value={userName} onChange={(event) => setUserName(event.target.value)} placeholder="Your name" />
             </label>
 
             <label>
               Room ID
-              <input
-                value={roomInput}
-                onChange={(event) => setRoomInput(event.target.value)}
-                placeholder="demo-room"
-              />
+              <input value={roomInput} onChange={(event) => setRoomInput(event.target.value)} placeholder="demo-room" />
             </label>
 
             <div className="button-row">
@@ -339,6 +577,7 @@ export default function App() {
             theme="vs-dark"
             language={language}
             value={code}
+            onMount={handleEditorMount}
             onChange={updateCode}
             options={{
               readOnly: !roomId,
@@ -350,7 +589,99 @@ export default function App() {
             }}
           />
         </section>
+
+        <aside className="ai-panel">
+          <div className="ai-header">
+            <div>
+              <p className="eyebrow">AI Workspace</p>
+              <h2>Room assistant</h2>
+            </div>
+            <span className="ai-state">{isAiStreaming ? "Streaming" : aiStatus}</span>
+          </div>
+
+          <div className="mode-tabs" role="tablist" aria-label="AI mode">
+            {aiModes.map((mode) => (
+              <button
+                key={mode.value}
+                type="button"
+                className={aiMode === mode.value ? "mode-tab active" : "mode-tab"}
+                onClick={() => setAiMode(mode.value)}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+
+          <form className="ai-composer" onSubmit={sendAiMessage}>
+            <label>
+              Prompt
+              <textarea
+                value={aiPrompt}
+                onChange={(event) => setAiPrompt(event.target.value)}
+                placeholder={roomId ? "Ask about the current room code" : "Join a room first"}
+                disabled={!roomId || isAiStreaming}
+              />
+            </label>
+            <div className="selection-note">
+              {selectedCode ? `${selectedCode.length.toLocaleString()} selected characters will be included` : "No editor selection"}
+            </div>
+            <button type="submit" disabled={!roomId || !aiPrompt.trim() || isAiStreaming}>
+              {isAiStreaming ? "Streaming" : `Run ${formatAiMode(aiMode)}`}
+            </button>
+          </form>
+
+          <div className="ai-messages">
+            {aiMessages.length === 0 ? (
+              <div className="ai-empty">
+                <h3>No AI messages yet</h3>
+                <p>Ask for an explanation, review, debugging pass, tests, or a refactor once the room is joined.</p>
+              </div>
+            ) : (
+              aiMessages.map((message) => (
+                <article key={message.id} className={`ai-message ${message.role}`}>
+                  <div className="ai-message-meta">
+                    <span>{message.role === "user" ? message.userName || "You" : "Code Collab AI"}</span>
+                    <span>{formatAiMode(message.mode)}</span>
+                  </div>
+                  <pre>{message.content || "..."}</pre>
+                  {message.citations.length > 0 ? (
+                    <div className="citations">
+                      {message.citations.map((citation) => (
+                        <span key={citation.chunkId}>
+                          {citation.language} {citation.startLine}-{citation.endLine}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {message.role === "assistant" && message.content ? (
+                    <div className="ai-actions">
+                      <button type="button" className="small-button" onClick={() => previewAssistantCode(message)}>
+                        Preview
+                      </button>
+                    </div>
+                  ) : null}
+                </article>
+              ))
+            )}
+          </div>
+
+          {previewCode ? (
+            <div className="preview-panel">
+              <div className="preview-header">
+                <h2>Suggestion Preview</h2>
+                <button type="button" className="small-button" onClick={() => setPreviewCode("")}>
+                  Close
+                </button>
+              </div>
+              <pre>{previewCode}</pre>
+              <button type="button" onClick={insertPreviewCode}>
+                Insert into editor
+              </button>
+            </div>
+          ) : null}
+        </aside>
       </section>
     </main>
   );
 }
+

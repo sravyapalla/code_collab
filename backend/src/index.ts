@@ -3,171 +3,62 @@ import cors from "cors";
 import express from "express";
 import http from "node:http";
 import { Server } from "socket.io";
+import { readConfig } from "./config.js";
+import { MemoryRoomRepository } from "./repositories/memoryRoomRepository.js";
+import { PostgresRoomRepository } from "./repositories/postgresRoomRepository.js";
+import { RoomRepository } from "./repositories/roomRepository.js";
+import { createAiRouter } from "./routes/aiRoutes.js";
+import { createAiProvider } from "./services/aiProvider.js";
+import { AiService } from "./services/aiService.js";
+import { RetrievalService } from "./services/retrievalService.js";
+import { RoomService } from "./services/roomService.js";
+import { registerSocketHandlers } from "./socket/registerSocketHandlers.js";
 
-type RoomState = {
-  code: string;
-  language: string;
-};
-
-type JoinRoomPayload = {
-  roomId: string;
-  userName: string;
-};
-
+const config = readConfig();
 const app = express();
 const server = http.createServer(app);
 
-const port = Number(process.env.PORT ?? 8000);
-const frontendOrigin = process.env.FRONTEND_ORIGIN ?? "http://localhost:5173";
+const repository: RoomRepository = config.databaseUrl
+  ? new PostgresRoomRepository(config.databaseUrl)
+  : new MemoryRoomRepository();
+const aiProvider = createAiProvider(config);
+const roomService = new RoomService(repository);
+const retrievalService = new RetrievalService(repository, aiProvider, config);
+const aiService = new AiService(repository, roomService, retrievalService, aiProvider, config);
 
-const rooms = new Map<string, RoomState>();
-const usersByRoom = new Map<string, Map<string, string>>();
-
-app.use(cors({ origin: frontendOrigin }));
-app.use(express.json());
+app.use(cors({ origin: config.frontendOrigin }));
+app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    status: "ok",
+    storage: config.databaseUrl ? "postgres" : "memory",
+    ai: aiProvider.isConfigured ? aiProvider.providerName : "disabled"
+  });
 });
+
+app.use("/api", createAiRouter(aiService));
 
 const io = new Server(server, {
   cors: {
-    origin: frontendOrigin,
+    origin: config.frontendOrigin,
     methods: ["GET", "POST"]
   }
 });
 
-function getRoom(roomId: string): RoomState {
-  const existingRoom = rooms.get(roomId);
+registerSocketHandlers(io, roomService, retrievalService);
 
-  if (existingRoom) {
-    return existingRoom;
-  }
+await repository.init();
 
-  const newRoom = {
-    code: "// Start coding together\nconsole.log('Hello from Code Collab');\n",
-    language: "javascript"
-  };
+server.listen(config.port, () => {
+  console.log(`Code Collab backend running on http://localhost:${config.port}`);
+  console.log(`Storage: ${config.databaseUrl ? "PostgreSQL + pgvector" : "memory fallback"}`);
+  console.log(`AI: ${aiProvider.isConfigured ? `${aiProvider.providerName}/${aiProvider.model}` : "disabled"}`);
+});
 
-  rooms.set(roomId, newRoom);
-  return newRoom;
-}
-
-function getRoomUsers(roomId: string): string[] {
-  return Array.from(usersByRoom.get(roomId)?.values() ?? []);
-}
-
-function broadcastUsers(roomId: string): void {
-  io.to(roomId).emit("users-changed", getRoomUsers(roomId));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isJoinRoomPayload(value: unknown): value is JoinRoomPayload {
-  return (
-    isRecord(value) &&
-    typeof value.roomId === "string" &&
-    typeof value.userName === "string"
-  );
-}
-
-function cleanupSocketRoom(socketId: string, roomId: string | undefined): void {
-  if (!roomId) {
-    return;
-  }
-
-  const roomUsers = usersByRoom.get(roomId);
-  roomUsers?.delete(socketId);
-
-  if (!roomUsers || roomUsers.size === 0) {
-    usersByRoom.delete(roomId);
-    return;
-  }
-
-  broadcastUsers(roomId);
-}
-
-io.on("connection", (socket) => {
-  socket.on("join-room", (payload: unknown) => {
-    if (!isJoinRoomPayload(payload)) {
-      socket.emit("error-message", "Room ID and name are required.");
-      return;
-    }
-
-    const { roomId, userName } = payload;
-    const cleanRoomId = roomId.trim();
-    const cleanUserName = userName.trim() || "Guest";
-
-    if (!cleanRoomId) {
-      socket.emit("error-message", "Room ID is required.");
-      return;
-    }
-
-    const previousRoomId = socket.data.roomId as string | undefined;
-
-    if (previousRoomId && previousRoomId !== cleanRoomId) {
-      socket.leave(previousRoomId);
-      cleanupSocketRoom(socket.id, previousRoomId);
-    }
-
-    socket.join(cleanRoomId);
-    socket.data.roomId = cleanRoomId;
-    socket.data.userName = cleanUserName;
-
-    const room = getRoom(cleanRoomId);
-    const roomUsers = usersByRoom.get(cleanRoomId) ?? new Map<string, string>();
-    roomUsers.set(socket.id, cleanUserName);
-    usersByRoom.set(cleanRoomId, roomUsers);
-
-    socket.emit("room-state", {
-      code: room.code,
-      language: room.language,
-      users: getRoomUsers(cleanRoomId)
-    });
-
-    broadcastUsers(cleanRoomId);
-  });
-
-  socket.on("code-change", (payload: unknown) => {
-    if (!isRecord(payload) || typeof payload.roomId !== "string" || typeof payload.code !== "string") {
-      socket.emit("error-message", "Code update is invalid.");
-      return;
-    }
-
-    const { roomId, code } = payload;
-    const room = getRoom(roomId);
-    room.code = code;
-    socket.to(roomId).emit("code-change", code);
-  });
-
-  socket.on("language-change", (payload: unknown) => {
-    if (!isRecord(payload) || typeof payload.roomId !== "string" || typeof payload.language !== "string") {
-      socket.emit("error-message", "Language update is invalid.");
-      return;
-    }
-
-    const { roomId, language } = payload;
-    const room = getRoom(roomId);
-    room.language = language;
-    socket.to(roomId).emit("language-change", language);
-  });
-
-  socket.on("leave-room", () => {
-    const roomId = socket.data.roomId as string | undefined;
-    socket.leave(roomId ?? "");
-    cleanupSocketRoom(socket.id, roomId);
-    socket.data.roomId = undefined;
-    socket.data.userName = undefined;
-  });
-
-  socket.on("disconnect", () => {
-    const roomId = socket.data.roomId as string | undefined;
-    cleanupSocketRoom(socket.id, roomId);
+process.on("SIGTERM", () => {
+  server.close(() => {
+    repository.close().catch((error: unknown) => console.error("Failed to close repository", error));
   });
 });
 
-server.listen(port, () => {
-  console.log(`Code Collab backend running on http://localhost:${port}`);
-});
