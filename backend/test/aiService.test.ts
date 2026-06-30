@@ -25,7 +25,9 @@ class MockAiProvider implements AiProvider {
 
 const testConfig: AppConfig = {
   port: 8000,
-  frontendOrigin: "http://localhost:5173",
+  frontendOrigins: ["http://localhost:5173"],
+  serveFrontend: false,
+  databaseSsl: false,
   openAiModel: "gpt-5.5",
   openAiEmbeddingModel: "text-embedding-3-small",
   aiMaxInputChars: 24000,
@@ -66,4 +68,3 @@ describe("AiService", () => {
     expect(messages[1].citations[0].startLine).toBe(1);
   });
 });
-

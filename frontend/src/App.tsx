@@ -34,7 +34,21 @@ type SseEvent = {
   data: unknown;
 };
 
-const backendUrl = import.meta.env.VITE_BACKEND_URL ?? "http://localhost:8000";
+function getBackendUrl(): string {
+  const configuredUrl = import.meta.env.VITE_BACKEND_URL;
+
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  if (window.location.hostname === "localhost" && window.location.port === "5173") {
+    return "http://localhost:8000";
+  }
+
+  return import.meta.env.PROD ? window.location.origin : "http://localhost:8000";
+}
+
+const backendUrl = getBackendUrl();
 const defaultCode = "// Join a room to start coding together.\n";
 const defaultRoomId = "demo-room";
 const defaultLanguage = "javascript";
@@ -684,4 +698,3 @@ export default function App() {
     </main>
   );
 }
-

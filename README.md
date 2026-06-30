@@ -12,6 +12,7 @@ The app still keeps the room-sharing workflow simple, but the backend is now str
 - OpenAI Responses API and embeddings
 - PostgreSQL with pgvector for persistence and semantic retrieval
 - Vitest for backend tests
+- Playwright for multi-user end-to-end tests
 
 ## Features
 
@@ -106,6 +107,49 @@ backend/migrations/001_ai_enhanced_code_collab.sql
 
 The backend also runs the same idempotent schema creation when `DATABASE_URL` is configured.
 
+## Deployment
+
+This repository is ready for a single-service Render deployment. The Express backend serves the built Vite frontend when `SERVE_FRONTEND=true`, so Socket.IO and API calls use the same production origin.
+
+1. Push the repo to GitHub.
+2. In Render, create a new Blueprint from this repository. Render will use `render.yaml`.
+3. Set these secret environment variables when prompted:
+
+```txt
+DATABASE_URL=your_postgres_connection_string
+OPENAI_API_KEY=your_openai_api_key
+```
+
+4. Keep these configured from `render.yaml`:
+
+```txt
+SERVE_FRONTEND=true
+OPENAI_MODEL=gpt-5.5
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+5. After deployment, open:
+
+```txt
+https://your-render-service.onrender.com/health
+```
+
+The health response should show `storage: "postgres"` when `DATABASE_URL` is set and `ai: "openai"` when `OPENAI_API_KEY` is set.
+
+For the database, use a hosted Postgres provider that supports pgvector, such as Supabase, Neon, or Render Postgres. Supabase users can enable the `vector` extension in the database dashboard or with:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+If your hosted database requires SSL, either append `?sslmode=require` to the connection string or set:
+
+```txt
+DATABASE_SSL=true
+```
+
+If `DATABASE_URL` is omitted, the app still deploys with in-memory rooms, but room persistence and RAG citations will reset on restart.
+
 ## AI/RAG Flow
 
 1. Room code changes are saved through the room service.
@@ -122,6 +166,7 @@ npm run dev:backend
 npm run dev:frontend
 npm test
 npm run build
+npm run test:e2e
 ```
 
 ## Sharing a Room

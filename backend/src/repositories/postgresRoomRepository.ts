@@ -44,9 +44,10 @@ function mapChunk(row: Record<string, unknown>): CodeChunk {
 export class PostgresRoomRepository implements RoomRepository {
   private readonly pool: Pool;
 
-  constructor(databaseUrl: string) {
+  constructor(databaseUrl: string, useSsl: boolean) {
     this.pool = new Pool({
-      connectionString: databaseUrl
+      connectionString: databaseUrl,
+      ssl: useSsl ? { rejectUnauthorized: false } : undefined
     });
   }
 
@@ -314,4 +315,3 @@ export class PostgresRoomRepository implements RoomRepository {
     return [...chunksById.values()].slice(0, limit);
   }
 }
-

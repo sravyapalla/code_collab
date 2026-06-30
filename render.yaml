@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: code-collab
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm --prefix backend start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SERVE_FRONTEND
+        value: "true"
+      - key: APP_HOST
+        fromService:
+          name: code-collab
+          type: web
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.5
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+      - key: AI_MAX_INPUT_CHARS
+        value: "24000"
+      - key: AI_RATE_LIMIT_PER_ROOM
+        value: "12"
+      - key: AI_RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: CODE_INDEX_DEBOUNCE_MS
+        value: "900"

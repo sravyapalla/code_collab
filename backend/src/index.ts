@@ -1,7 +1,10 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
 import { readConfig } from "./config.js";
 import { MemoryRoomRepository } from "./repositories/memoryRoomRepository.js";
@@ -19,14 +22,16 @@ const app = express();
 const server = http.createServer(app);
 
 const repository: RoomRepository = config.databaseUrl
-  ? new PostgresRoomRepository(config.databaseUrl)
+  ? new PostgresRoomRepository(config.databaseUrl, config.databaseSsl)
   : new MemoryRoomRepository();
 const aiProvider = createAiProvider(config);
 const roomService = new RoomService(repository);
 const retrievalService = new RetrievalService(repository, aiProvider, config);
 const aiService = new AiService(repository, roomService, retrievalService, aiProvider, config);
 
-app.use(cors({ origin: config.frontendOrigin }));
+const corsOrigin = config.frontendOrigins.includes("*") ? true : config.frontendOrigins;
+
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {
@@ -39,9 +44,29 @@ app.get("/health", (_req, res) => {
 
 app.use("/api", createAiRouter(aiService));
 
+if (config.serveFrontend) {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const frontendDistPath = path.resolve(currentDir, "../../frontend/dist");
+  const frontendIndexPath = path.join(frontendDistPath, "index.html");
+
+  if (fs.existsSync(frontendIndexPath)) {
+    app.use(express.static(frontendDistPath));
+    app.get("*", (req, res, next) => {
+      if (req.path === "/health" || req.path.startsWith("/api") || req.path.startsWith("/socket.io")) {
+        next();
+        return;
+      }
+
+      res.sendFile(frontendIndexPath);
+    });
+  } else {
+    console.warn(`SERVE_FRONTEND is enabled but ${frontendIndexPath} was not found.`);
+  }
+}
+
 const io = new Server(server, {
   cors: {
-    origin: config.frontendOrigin,
+    origin: corsOrigin,
     methods: ["GET", "POST"]
   }
 });
@@ -50,10 +75,11 @@ registerSocketHandlers(io, roomService, retrievalService);
 
 await repository.init();
 
-server.listen(config.port, () => {
+server.listen(config.port, "0.0.0.0", () => {
   console.log(`Code Collab backend running on http://localhost:${config.port}`);
   console.log(`Storage: ${config.databaseUrl ? "PostgreSQL + pgvector" : "memory fallback"}`);
   console.log(`AI: ${aiProvider.isConfigured ? `${aiProvider.providerName}/${aiProvider.model}` : "disabled"}`);
+  console.log(`Frontend origins: ${config.frontendOrigins.join(", ")}`);
 });
 
 process.on("SIGTERM", () => {
@@ -61,4 +87,3 @@ process.on("SIGTERM", () => {
     repository.close().catch((error: unknown) => console.error("Failed to close repository", error));
   });
 });
-
