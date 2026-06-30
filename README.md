@@ -4,6 +4,32 @@ Code Collab is a real-time collaborative code editor with an AI workspace. Users
 
 The app still keeps the room-sharing workflow simple, but the backend is now structured around services and repositories so it can run as a local demo or as a Postgres-backed app with RAG.
 
+## Live Deployment
+
+Live app:
+
+```txt
+https://code-collab-w0dg.onrender.com
+```
+
+Health check:
+
+```txt
+https://code-collab-w0dg.onrender.com/health
+```
+
+Current deployed health response:
+
+```json
+{
+  "status": "ok",
+  "storage": "postgres",
+  "ai": "openai"
+}
+```
+
+The production deployment runs the React/Vite frontend and Express/Socket.IO backend together on one Render web service. Render PostgreSQL stores room state, AI messages, and pgvector embeddings for RAG-based room-code retrieval.
+
 ## Tech Stack
 
 - React, TypeScript, Vite
@@ -13,6 +39,7 @@ The app still keeps the room-sharing workflow simple, but the backend is now str
 - PostgreSQL with pgvector for persistence and semantic retrieval
 - Vitest for backend tests
 - Playwright for multi-user end-to-end tests
+- Render for full-stack deployment and managed PostgreSQL
 
 ## Features
 
@@ -44,6 +71,7 @@ code-collab/
 |   +-- src/              # React app and styles
 +-- .github/workflows/ci.yml
 +-- package.json
++-- render.yaml           # Render web service + PostgreSQL Blueprint
 ```
 
 ## Local Setup
@@ -79,7 +107,10 @@ Backend:
 ```txt
 PORT=8000
 FRONTEND_ORIGIN=http://localhost:5173
+SERVE_FRONTEND=false
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/code_collab
+DATABASE_SSL=false
+APP_HOST=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.5
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
@@ -109,7 +140,7 @@ The backend also runs the same idempotent schema creation when `DATABASE_URL` is
 
 ## Deployment
 
-This repository is ready for a single-service Render deployment. The Express backend serves the built Vite frontend when `SERVE_FRONTEND=true`, so Socket.IO and API calls use the same production origin.
+This project is deployed on Render as a single full-stack service. The Express backend serves the built Vite frontend when `SERVE_FRONTEND=true`, so Socket.IO, REST API, SSE AI streaming, and the frontend all run from the same production origin.
 
 1. Push the repo to GitHub.
 2. In Render, create a new Blueprint from this repository. Render will use `render.yaml`.
@@ -143,6 +174,12 @@ https://your-render-service.onrender.com/health
 ```
 
 The health response should show `storage: "postgres"` because the Blueprint wires `DATABASE_URL` from `code-collab-db`, and `ai: "openai"` when `OPENAI_API_KEY` is set.
+
+This deployment is currently live at:
+
+```txt
+https://code-collab-w0dg.onrender.com
+```
 
 The backend creates the pgvector extension on startup with:
 
@@ -185,7 +222,13 @@ After joining a room, use **Copy Link** to share a URL like:
 http://localhost:5173/?room=demo-room
 ```
 
-Opening that link pre-fills the room ID so another user can join quickly.
+In production, the same flow works with the deployed URL:
+
+```txt
+https://code-collab-w0dg.onrender.com/?room=demo-room
+```
+
+Opening either link pre-fills the room ID so another user can join quickly.
 
 ## Next Steps
 
