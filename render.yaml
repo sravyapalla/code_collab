@@ -1,3 +1,9 @@
+databases:
+  - name: code-collab-db
+    plan: free
+    databaseName: code_collab
+    user: code_collab_user
+
 services:
   - type: web
     name: code-collab
@@ -17,7 +23,11 @@ services:
           type: web
           envVarKey: RENDER_EXTERNAL_HOSTNAME
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: code-collab-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "false"
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL

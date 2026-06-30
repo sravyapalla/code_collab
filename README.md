@@ -113,36 +113,44 @@ This repository is ready for a single-service Render deployment. The Express bac
 
 1. Push the repo to GitHub.
 2. In Render, create a new Blueprint from this repository. Render will use `render.yaml`.
-3. Set these secret environment variables when prompted:
+3. The Blueprint creates:
 
 ```txt
-DATABASE_URL=your_postgres_connection_string
+code-collab     # Node web service
+code-collab-db  # PostgreSQL database
+```
+
+4. Set this secret environment variable when prompted:
+
+```txt
 OPENAI_API_KEY=your_openai_api_key
 ```
 
-4. Keep these configured from `render.yaml`:
+5. Keep these configured from `render.yaml`:
 
 ```txt
 SERVE_FRONTEND=true
+DATABASE_URL=auto-filled from code-collab-db
+DATABASE_SSL=false
 OPENAI_MODEL=gpt-5.5
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-5. After deployment, open:
+6. After deployment, open:
 
 ```txt
 https://your-render-service.onrender.com/health
 ```
 
-The health response should show `storage: "postgres"` when `DATABASE_URL` is set and `ai: "openai"` when `OPENAI_API_KEY` is set.
+The health response should show `storage: "postgres"` because the Blueprint wires `DATABASE_URL` from `code-collab-db`, and `ai: "openai"` when `OPENAI_API_KEY` is set.
 
-For the database, use a hosted Postgres provider that supports pgvector, such as Supabase, Neon, or Render Postgres. Supabase users can enable the `vector` extension in the database dashboard or with:
+The backend creates the pgvector extension on startup with:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-If your hosted database requires SSL, either append `?sslmode=require` to the connection string or set:
+If you use an external hosted database instead of the Blueprint database, use a Postgres provider that supports pgvector, such as Supabase, Neon, or Render Postgres. For SSL-required providers, either append `?sslmode=require` to the connection string or set:
 
 ```txt
 DATABASE_SSL=true
