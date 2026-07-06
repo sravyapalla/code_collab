@@ -62,3 +62,19 @@ export type AiUsageLog = {
   totalTokens?: number;
 };
 
+export type GithubPushRequest = {
+  token: string;
+  owner: string;
+  repo: string;
+  branch: string;
+  path: string;
+  message: string;
+  content: string;
+};
+
+export type GithubPushResult = {
+  path: string;
+  branch: string;
+  htmlUrl: string;
+  commitSha: string;
+};

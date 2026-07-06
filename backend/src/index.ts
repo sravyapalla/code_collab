@@ -11,8 +11,10 @@ import { MemoryRoomRepository } from "./repositories/memoryRoomRepository.js";
 import { PostgresRoomRepository } from "./repositories/postgresRoomRepository.js";
 import { RoomRepository } from "./repositories/roomRepository.js";
 import { createAiRouter } from "./routes/aiRoutes.js";
+import { createGithubRouter } from "./routes/githubRoutes.js";
 import { createAiProvider } from "./services/aiProvider.js";
 import { AiService } from "./services/aiService.js";
+import { GithubService } from "./services/githubService.js";
 import { RetrievalService } from "./services/retrievalService.js";
 import { RoomService } from "./services/roomService.js";
 import { registerSocketHandlers } from "./socket/registerSocketHandlers.js";
@@ -28,6 +30,7 @@ const aiProvider = createAiProvider(config);
 const roomService = new RoomService(repository);
 const retrievalService = new RetrievalService(repository, aiProvider, config);
 const aiService = new AiService(repository, roomService, retrievalService, aiProvider, config);
+const githubService = new GithubService();
 
 const corsOrigin = config.frontendOrigins.includes("*") ? true : config.frontendOrigins;
 
@@ -43,6 +46,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api", createAiRouter(aiService));
+app.use("/api", createGithubRouter(githubService));
 
 if (config.serveFrontend) {
   const currentDir = path.dirname(fileURLToPath(import.meta.url));

@@ -54,6 +54,7 @@ The production deployment runs the React/Vite frontend and Express/Socket.IO bac
 - Ask a streamed AI assistant with modes for Ask, Explain, Debug, Review, Tests, and Refactor
 - Show RAG citations from retrieved room chunks
 - Preview AI code suggestions and insert them into the editor
+- Append AI code suggestions to the editor or push the previewed suggestion to a GitHub repository
 
 ## Project Structure
 
@@ -129,6 +130,8 @@ VITE_BACKEND_URL=http://localhost:8000
 If `DATABASE_URL` is omitted, the backend uses an in-memory repository. If `OPENAI_API_KEY` is omitted, the AI panel still streams a setup message but embeddings and model answers are disabled.
 
 To change the AI key locally, edit `backend/.env`, set `OPENAI_API_KEY=sk-...`, and restart `npm run dev:backend`. To change the deployed app key, update `OPENAI_API_KEY` in the Render `code-collab` service environment and restart or redeploy the service. A `429` quota/billing error means the configured key's OpenAI project or organization needs active quota/billing, or a different key with available quota.
+
+The GitHub push action uses the token entered in the preview panel for that request only. Use a GitHub token that can read and write repository contents for the selected repository.
 
 ## PostgreSQL + pgvector
 

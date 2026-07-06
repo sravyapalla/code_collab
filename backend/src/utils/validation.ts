@@ -1,4 +1,4 @@
-import { AiMode, AiStreamRequest, JoinRoomPayload } from "../types.js";
+import { AiMode, AiStreamRequest, GithubPushRequest, JoinRoomPayload } from "../types.js";
 
 const aiModes = new Set<AiMode>(["ask", "explain", "debug", "review", "tests", "refactor"]);
 
@@ -32,3 +32,38 @@ export function parseAiStreamRequest(value: unknown): AiStreamRequest | null {
   };
 }
 
+function readTrimmedString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function parseGithubPushRequest(value: unknown): GithubPushRequest | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const token = readTrimmedString(value.token);
+  const owner = readTrimmedString(value.owner);
+  const repo = readTrimmedString(value.repo);
+  const branch = readTrimmedString(value.branch) ?? "main";
+  const path = readTrimmedString(value.path);
+  const message = readTrimmedString(value.message) ?? "Update code from Code Collab";
+  const content = typeof value.content === "string" ? value.content : null;
+
+  if (!token || !owner || !repo || !path || content === null) {
+    return null;
+  }
+
+  if (content.length > 750000 || path.startsWith("/") || path.includes("..")) {
+    return null;
+  }
+
+  return {
+    token,
+    owner,
+    repo,
+    branch,
+    path,
+    message,
+    content
+  };
+}

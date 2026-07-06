@@ -410,8 +410,38 @@ textarea:focus {
 .preview-panel {
   display: grid;
   gap: 12px;
-  max-height: 42vh;
+  max-height: 62vh;
   overflow: auto;
+}
+
+.preview-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.github-form {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(245, 247, 244, 0.1);
+}
+
+.github-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.github-status,
+.github-link {
+  color: #ffd480;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.github-link {
+  font-weight: 800;
 }
 
 @media (max-width: 1180px) {
@@ -450,5 +480,9 @@ textarea:focus {
   .ai-panel {
     min-height: 560px;
   }
-}
 
+  .github-grid,
+  .preview-actions {
+    grid-template-columns: 1fr;
+  }
+}

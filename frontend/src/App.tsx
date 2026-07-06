@@ -34,6 +34,13 @@ type SseEvent = {
   data: unknown;
 };
 
+type GithubPushResult = {
+  path: string;
+  branch: string;
+  htmlUrl: string;
+  commitSha: string;
+};
+
 function getBackendUrl(): string {
   const configuredUrl = import.meta.env.VITE_BACKEND_URL;
 
@@ -54,12 +61,23 @@ const defaultRoomId = "demo-room";
 const defaultLanguage = "javascript";
 
 const storageKeys = {
+  githubBranch: "code-collab:github-branch",
+  githubOwner: "code-collab:github-owner",
+  githubPath: "code-collab:github-path",
+  githubRepo: "code-collab:github-repo",
   language: "code-collab:language",
   roomId: "code-collab:room-id",
   userName: "code-collab:user-name"
 };
 
 const languageOptions = ["javascript", "typescript", "python", "cpp", "java"];
+const fileExtensions: Record<string, string> = {
+  cpp: "cpp",
+  java: "java",
+  javascript: "js",
+  python: "py",
+  typescript: "ts"
+};
 
 const aiModes: Array<{ value: AiMode; label: string }> = [
   { value: "ask", label: "Ask" },
@@ -126,6 +144,10 @@ function formatAiMode(mode: AiMode): string {
   return aiModes.find((option) => option.value === mode)?.label ?? "Ask";
 }
 
+function getDefaultGithubPath(language: string): string {
+  return `code-collab-suggestion.${fileExtensions[language] ?? "txt"}`;
+}
+
 function parseSseBuffer(buffer: string, onEvent: (event: SseEvent) => void): string {
   const normalizedBuffer = buffer.replace(/\r\n/g, "\n");
   const parts = normalizedBuffer.split("\n\n");
@@ -181,6 +203,15 @@ export default function App() {
   const [isAiStreaming, setIsAiStreaming] = useState(false);
   const [selectedCode, setSelectedCode] = useState("");
   const [previewCode, setPreviewCode] = useState("");
+  const [githubOwner, setGithubOwner] = useState(() => readStorage(storageKeys.githubOwner, ""));
+  const [githubRepo, setGithubRepo] = useState(() => readStorage(storageKeys.githubRepo, ""));
+  const [githubBranch, setGithubBranch] = useState(() => readStorage(storageKeys.githubBranch, "main"));
+  const [githubPath, setGithubPath] = useState(() => readStorage(storageKeys.githubPath, getDefaultGithubPath(defaultLanguage)));
+  const [githubToken, setGithubToken] = useState("");
+  const [githubMessage, setGithubMessage] = useState("Update code from Code Collab");
+  const [githubStatus, setGithubStatus] = useState("");
+  const [githubResult, setGithubResult] = useState<GithubPushResult | null>(null);
+  const [isGithubPushing, setIsGithubPushing] = useState(false);
 
   const socket: Socket = useMemo(() => {
     return io(backendUrl, {
@@ -229,6 +260,22 @@ export default function App() {
   useEffect(() => {
     writeStorage(storageKeys.language, language);
   }, [language]);
+
+  useEffect(() => {
+    writeStorage(storageKeys.githubOwner, githubOwner);
+  }, [githubOwner]);
+
+  useEffect(() => {
+    writeStorage(storageKeys.githubRepo, githubRepo);
+  }, [githubRepo]);
+
+  useEffect(() => {
+    writeStorage(storageKeys.githubBranch, githubBranch);
+  }, [githubBranch]);
+
+  useEffect(() => {
+    writeStorage(storageKeys.githubPath, githubPath);
+  }, [githubPath]);
 
   useEffect(() => {
     if (roomInput.trim()) {
@@ -489,6 +536,12 @@ export default function App() {
 
   function previewAssistantCode(message: AiMessage) {
     setPreviewCode(extractFirstCodeBlock(message.content));
+    setGithubStatus("");
+    setGithubResult(null);
+
+    if (!githubPath.trim()) {
+      setGithubPath(getDefaultGithubPath(language));
+    }
   }
 
   function insertPreviewCode() {
@@ -499,6 +552,61 @@ export default function App() {
     updateCode(previewCode);
     setPreviewCode("");
     setAiStatus("Inserted AI suggestion into the editor");
+  }
+
+  function appendPreviewCode() {
+    if (!previewCode) {
+      return;
+    }
+
+    const separator = code && !code.endsWith("\n") ? "\n\n" : "";
+    updateCode(`${code}${separator}${previewCode}`);
+    setPreviewCode("");
+    setAiStatus("Appended AI suggestion to the editor");
+  }
+
+  async function pushPreviewToGithub(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!previewCode || isGithubPushing) {
+      return;
+    }
+
+    setIsGithubPushing(true);
+    setGithubStatus("Pushing to GitHub");
+    setGithubResult(null);
+
+    try {
+      const response = await fetch(`${backendUrl}/api/github/push`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          token: githubToken,
+          owner: githubOwner,
+          repo: githubRepo,
+          branch: githubBranch,
+          path: githubPath,
+          message: githubMessage,
+          content: previewCode
+        })
+      });
+
+      const payload = await response.json().catch(() => ({ message: "Could not push to GitHub." }));
+
+      if (!response.ok) {
+        throw new Error(String(payload.message ?? "Could not push to GitHub."));
+      }
+
+      const result = payload as GithubPushResult;
+      setGithubResult(result);
+      setGithubStatus(`Pushed ${result.path} to ${result.branch}`);
+    } catch (error) {
+      setGithubStatus(error instanceof Error ? error.message : "Could not push to GitHub.");
+    } finally {
+      setIsGithubPushing(false);
+    }
   }
 
   return (
@@ -688,9 +796,69 @@ export default function App() {
                 </button>
               </div>
               <pre>{previewCode}</pre>
-              <button type="button" onClick={insertPreviewCode}>
-                Insert into editor
-              </button>
+              <div className="preview-actions">
+                <button type="button" onClick={insertPreviewCode}>
+                  Insert into editor
+                </button>
+                <button type="button" className="secondary-button" onClick={appendPreviewCode}>
+                  Append to editor
+                </button>
+              </div>
+
+              <form className="github-form" onSubmit={pushPreviewToGithub}>
+                <h2>GitHub Push</h2>
+                <div className="github-grid">
+                  <label>
+                    Owner
+                    <input value={githubOwner} onChange={(event) => setGithubOwner(event.target.value)} placeholder="owner" />
+                  </label>
+                  <label>
+                    Repository
+                    <input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="repo" />
+                  </label>
+                  <label>
+                    Branch
+                    <input value={githubBranch} onChange={(event) => setGithubBranch(event.target.value)} placeholder="main" />
+                  </label>
+                  <label>
+                    File path
+                    <input value={githubPath} onChange={(event) => setGithubPath(event.target.value)} placeholder={getDefaultGithubPath(language)} />
+                  </label>
+                </div>
+                <label>
+                  Token
+                  <input
+                    type="password"
+                    value={githubToken}
+                    onChange={(event) => setGithubToken(event.target.value)}
+                    placeholder="github_pat_..."
+                    autoComplete="off"
+                  />
+                </label>
+                <label>
+                  Commit message
+                  <input value={githubMessage} onChange={(event) => setGithubMessage(event.target.value)} />
+                </label>
+                <button
+                  type="submit"
+                  disabled={
+                    isGithubPushing ||
+                    !githubOwner.trim() ||
+                    !githubRepo.trim() ||
+                    !githubBranch.trim() ||
+                    !githubPath.trim() ||
+                    !githubToken.trim()
+                  }
+                >
+                  {isGithubPushing ? "Pushing" : "Push to GitHub"}
+                </button>
+                {githubStatus ? <p className="github-status">{githubStatus}</p> : null}
+                {githubResult ? (
+                  <a className="github-link" href={githubResult.htmlUrl} target="_blank" rel="noreferrer">
+                    Open on GitHub
+                  </a>
+                ) : null}
+              </form>
             </div>
           ) : null}
         </aside>
