@@ -51,6 +51,27 @@ button:disabled {
     #111413;
 }
 
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(180deg, rgba(114, 214, 165, 0.11), transparent 320px),
+    #111413;
+}
+
+.login-panel {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid rgba(245, 247, 244, 0.12);
+  border-radius: 8px;
+  background: rgba(24, 30, 28, 0.92);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
 .topbar {
   min-height: 88px;
   display: flex;
@@ -59,6 +80,39 @@ button:disabled {
   gap: 24px;
   padding: 20px 28px;
   border-bottom: 1px solid rgba(245, 247, 244, 0.09);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.user-chip {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: #edf2ee;
+  text-align: right;
+}
+
+.user-chip span,
+.user-chip small {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-chip span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.user-chip small {
+  color: #b8c3bb;
+  font-size: 11px;
 }
 
 .eyebrow {
@@ -475,6 +529,16 @@ textarea:focus {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .user-chip {
+    text-align: left;
   }
 
   .workspace {

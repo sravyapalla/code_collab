@@ -51,6 +51,11 @@ type GithubConnectionResult = {
   defaultBranch: string;
 };
 
+type AuthUser = {
+  name: string;
+  email: string;
+};
+
 function getBackendUrl(): string {
   const configuredUrl = import.meta.env.VITE_BACKEND_URL;
 
@@ -71,6 +76,8 @@ const defaultRoomId = "demo-room";
 const defaultLanguage = "javascript";
 
 const storageKeys = {
+  authEmail: "code-collab:auth-email",
+  authName: "code-collab:auth-name",
   githubBranch: "code-collab:github-branch",
   githubOwner: "code-collab:github-owner",
   githubPath: "code-collab:github-path",
@@ -120,6 +127,20 @@ function writeStorage(key: string, value: string): void {
   } catch {
     // Local storage can be unavailable in restrictive browser contexts.
   }
+}
+
+function removeStorage(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Local storage can be unavailable in restrictive browser contexts.
+  }
+}
+
+function readAuthUser(): AuthUser | null {
+  const name = readStorage(storageKeys.authName, "").trim();
+  const email = readStorage(storageKeys.authEmail, "").trim();
+  return name && email ? { name, email } : null;
 }
 
 function getInitialRoomId(): string {
@@ -215,9 +236,12 @@ function parseSseBuffer(buffer: string, onEvent: (event: SseEvent) => void): str
 }
 
 export default function App() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(readAuthUser);
+  const [loginName, setLoginName] = useState(() => authUser?.name ?? readStorage(storageKeys.userName, ""));
+  const [loginEmail, setLoginEmail] = useState(() => authUser?.email ?? "");
   const [roomInput, setRoomInput] = useState(getInitialRoomId);
   const [roomId, setRoomId] = useState("");
-  const [userName, setUserName] = useState(() => readStorage(storageKeys.userName, createGuestName()));
+  const [userName, setUserName] = useState(() => authUser?.name ?? readStorage(storageKeys.userName, createGuestName()));
   const [code, setCode] = useState(defaultCode);
   const [language, setLanguage] = useState(() => readStorage(storageKeys.language, defaultLanguage));
   const [users, setUsers] = useState<string[]>([]);
@@ -286,6 +310,13 @@ export default function App() {
   useEffect(() => {
     writeStorage(storageKeys.userName, userName);
   }, [userName]);
+
+  useEffect(() => {
+    if (authUser) {
+      writeStorage(storageKeys.authName, authUser.name);
+      writeStorage(storageKeys.authEmail, authUser.email);
+    }
+  }, [authUser]);
 
   useEffect(() => {
     writeStorage(storageKeys.language, language);
@@ -373,6 +404,37 @@ export default function App() {
       roomId: nextRoomId,
       userName: nextUserName
     });
+  }
+
+  function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const cleanName = loginName.trim();
+    const cleanEmail = loginEmail.trim();
+
+    if (!cleanName || !cleanEmail) {
+      return;
+    }
+
+    const nextUser = {
+      name: cleanName,
+      email: cleanEmail
+    };
+
+    setAuthUser(nextUser);
+    setUserName(cleanName);
+    writeStorage(storageKeys.userName, cleanName);
+    writeStorage(storageKeys.authName, cleanName);
+    writeStorage(storageKeys.authEmail, cleanEmail);
+  }
+
+  function logout() {
+    leaveRoom();
+    setAuthUser(null);
+    setLoginName("");
+    setLoginEmail("");
+    removeStorage(storageKeys.authName);
+    removeStorage(storageKeys.authEmail);
   }
 
   function leaveRoom() {
@@ -702,6 +764,35 @@ export default function App() {
     }
   }
 
+  if (!authUser) {
+    return (
+      <main className="login-shell">
+        <form className="login-panel" onSubmit={login}>
+          <div>
+            <p className="eyebrow">Code Collab</p>
+            <h1>Sign in</h1>
+          </div>
+          <label>
+            Name
+            <input value={loginName} onChange={(event) => setLoginName(event.target.value)} placeholder="Your name" />
+          </label>
+          <label>
+            Email
+            <input
+              type="email"
+              value={loginEmail}
+              onChange={(event) => setLoginEmail(event.target.value)}
+              placeholder="you@example.com"
+            />
+          </label>
+          <button type="submit" disabled={!loginName.trim() || !loginEmail.trim()}>
+            Continue
+          </button>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="topbar">
@@ -709,7 +800,16 @@ export default function App() {
           <p className="eyebrow">Code Collab</p>
           <h1>AI-assisted code rooms</h1>
         </div>
-        <span className={socket.connected ? "status online" : "status"}>{status}</span>
+        <div className="topbar-actions">
+          <div className="user-chip">
+            <span>{authUser.name}</span>
+            <small>{authUser.email}</small>
+          </div>
+          <button type="button" className="small-button" onClick={logout}>
+            Logout
+          </button>
+          <span className={socket.connected ? "status online" : "status"}>{status}</span>
+        </div>
       </section>
 
       <section className="workspace">
