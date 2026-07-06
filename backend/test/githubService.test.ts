@@ -46,6 +46,44 @@ describe("GithubService", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).not.toHaveProperty("sha");
   });
 
+  it("tests repository and branch access", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            default_branch: "main",
+            full_name: "demo/repo",
+            name: "repo",
+            owner: {
+              login: "demo"
+            },
+            permissions: {
+              push: true
+            },
+            private: false
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "main" }), { status: 200 }));
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      new GithubService("https://api.github.test").testConnection({
+        token: "token",
+        owner: "demo",
+        repo: "repo",
+        branch: "main"
+      })
+    ).resolves.toMatchObject({
+      branch: "main",
+      canPush: true,
+      fullName: "demo/repo"
+    });
+  });
+
   it("updates an existing file with its sha", async () => {
     const fetchMock = vi
       .fn()

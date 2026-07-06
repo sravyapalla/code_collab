@@ -41,6 +41,16 @@ type GithubPushResult = {
   commitSha: string;
 };
 
+type GithubConnectionResult = {
+  owner: string;
+  repo: string;
+  branch: string;
+  fullName: string;
+  private: boolean;
+  canPush: boolean;
+  defaultBranch: string;
+};
+
 function getBackendUrl(): string {
   const configuredUrl = import.meta.env.VITE_BACKEND_URL;
 
@@ -148,6 +158,24 @@ function getDefaultGithubPath(language: string): string {
   return `code-collab-suggestion.${fileExtensions[language] ?? "txt"}`;
 }
 
+function normalizeGithubPath(path: string, language: string): string {
+  const cleanPath = path.trim();
+
+  if (!cleanPath) {
+    return getDefaultGithubPath(language);
+  }
+
+  const extension = fileExtensions[language] ?? "txt";
+  const parts = cleanPath.split("/");
+  const fileName = parts[parts.length - 1] ?? "";
+
+  if (fileName.includes(".")) {
+    return cleanPath;
+  }
+
+  return `${cleanPath}.${extension}`;
+}
+
 function parseSseBuffer(buffer: string, onEvent: (event: SseEvent) => void): string {
   const normalizedBuffer = buffer.replace(/\r\n/g, "\n");
   const parts = normalizedBuffer.split("\n\n");
@@ -212,6 +240,8 @@ export default function App() {
   const [githubStatus, setGithubStatus] = useState("");
   const [githubResult, setGithubResult] = useState<GithubPushResult | null>(null);
   const [isGithubPushing, setIsGithubPushing] = useState(false);
+  const [githubConnection, setGithubConnection] = useState<GithubConnectionResult | null>(null);
+  const [isGithubTesting, setIsGithubTesting] = useState(false);
 
   const socket: Socket = useMemo(() => {
     return io(backendUrl, {
@@ -419,6 +449,24 @@ export default function App() {
     }
   }
 
+  function updateGithubPath(nextPath: string) {
+    setGithubPath(nextPath);
+    setGithubConnection(null);
+    setGithubResult(null);
+  }
+
+  function updateGithubConnectionField(update: () => void) {
+    update();
+    setGithubConnection(null);
+    setGithubResult(null);
+  }
+
+  function normalizeCurrentGithubPath(): string {
+    const normalizedPath = normalizeGithubPath(githubPath, language);
+    setGithubPath(normalizedPath);
+    return normalizedPath;
+  }
+
   const handleEditorMount: OnMount = (editor) => {
     const refreshSelection = () => {
       const selection = editor.getSelection();
@@ -565,6 +613,50 @@ export default function App() {
     setAiStatus("Appended AI suggestion to the editor");
   }
 
+  async function testGithubConnection() {
+    if (isGithubTesting) {
+      return;
+    }
+
+    setIsGithubTesting(true);
+    setGithubStatus("Testing GitHub connection");
+    setGithubConnection(null);
+    setGithubResult(null);
+
+    try {
+      const response = await fetch(`${backendUrl}/api/github/test`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          token: githubToken,
+          owner: githubOwner,
+          repo: githubRepo,
+          branch: githubBranch
+        })
+      });
+
+      const payload = await response.json().catch(() => ({ message: "Could not connect to GitHub." }));
+
+      if (!response.ok) {
+        throw new Error(String(payload.message ?? "Could not connect to GitHub."));
+      }
+
+      const result = payload as GithubConnectionResult;
+      setGithubConnection(result);
+      setGithubStatus(
+        result.canPush
+          ? `Connected to ${result.fullName}:${result.branch}`
+          : `Connected to ${result.fullName}, but token may not have push access.`
+      );
+    } catch (error) {
+      setGithubStatus(error instanceof Error ? error.message : "Could not connect to GitHub.");
+    } finally {
+      setIsGithubTesting(false);
+    }
+  }
+
   async function pushPreviewToGithub(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -575,6 +667,7 @@ export default function App() {
     setIsGithubPushing(true);
     setGithubStatus("Pushing to GitHub");
     setGithubResult(null);
+    const normalizedPath = normalizeCurrentGithubPath();
 
     try {
       const response = await fetch(`${backendUrl}/api/github/push`, {
@@ -587,7 +680,7 @@ export default function App() {
           owner: githubOwner,
           repo: githubRepo,
           branch: githubBranch,
-          path: githubPath,
+          path: normalizedPath,
           message: githubMessage,
           content: previewCode
         })
@@ -668,27 +761,44 @@ export default function App() {
               <div className="github-grid">
                 <label>
                   Owner
-                  <input value={githubOwner} onChange={(event) => setGithubOwner(event.target.value)} placeholder="owner" />
+                  <input
+                    value={githubOwner}
+                    onChange={(event) => updateGithubConnectionField(() => setGithubOwner(event.target.value))}
+                    placeholder="owner"
+                  />
                 </label>
                 <label>
                   Repository
-                  <input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="repo" />
+                  <input
+                    value={githubRepo}
+                    onChange={(event) => updateGithubConnectionField(() => setGithubRepo(event.target.value))}
+                    placeholder="repo"
+                  />
                 </label>
                 <label>
                   Branch
-                  <input value={githubBranch} onChange={(event) => setGithubBranch(event.target.value)} placeholder="main" />
+                  <input
+                    value={githubBranch}
+                    onChange={(event) => updateGithubConnectionField(() => setGithubBranch(event.target.value))}
+                    placeholder="main"
+                  />
                 </label>
-                <label>
-                  File path
-                  <input value={githubPath} onChange={(event) => setGithubPath(event.target.value)} placeholder={getDefaultGithubPath(language)} />
-                </label>
-              </div>
+              <label>
+                File path
+                <input
+                  value={githubPath}
+                  onBlur={normalizeCurrentGithubPath}
+                  onChange={(event) => updateGithubPath(event.target.value)}
+                  placeholder={getDefaultGithubPath(language)}
+                />
+              </label>
+            </div>
               <label>
                 Token
                 <input
                   type="password"
                   value={githubToken}
-                  onChange={(event) => setGithubToken(event.target.value)}
+                  onChange={(event) => updateGithubConnectionField(() => setGithubToken(event.target.value))}
                   placeholder="github_pat_..."
                   autoComplete="off"
                 />
@@ -697,6 +807,20 @@ export default function App() {
                 Commit message
                 <input value={githubMessage} onChange={(event) => setGithubMessage(event.target.value)} />
               </label>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={testGithubConnection}
+                disabled={
+                  isGithubTesting ||
+                  !githubOwner.trim() ||
+                  !githubRepo.trim() ||
+                  !githubBranch.trim() ||
+                  !githubToken.trim()
+                }
+              >
+                {isGithubTesting ? "Testing" : "Test connection"}
+              </button>
               <button
                 type="submit"
                 disabled={
@@ -716,6 +840,11 @@ export default function App() {
                 <a className="github-link" href={githubResult.htmlUrl} target="_blank" rel="noreferrer">
                   Open on GitHub
                 </a>
+              ) : null}
+              {githubConnection ? (
+                <p className="github-meta">
+                  {githubConnection.private ? "Private" : "Public"} repo, default branch {githubConnection.defaultBranch}
+                </p>
               ) : null}
             </form>
           </div>

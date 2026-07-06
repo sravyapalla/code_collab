@@ -132,6 +132,7 @@ If `DATABASE_URL` is omitted, the backend uses an in-memory repository. If `OPEN
 To change the AI key locally, edit `backend/.env`, set `OPENAI_API_KEY=sk-...`, and restart `npm run dev:backend`. To change the deployed app key, update `OPENAI_API_KEY` in the Render `code-collab` service environment and restart or redeploy the service. A `429` quota/billing error means the configured key's OpenAI project or organization needs active quota/billing, or a different key with available quota.
 
 The GitHub push action uses the token entered in the preview panel for that request only. Use a GitHub token that can read and write repository contents for the selected repository.
+Use **Test connection** in the GitHub panel to verify repository and branch access before pushing. If the file path has no extension, the app appends one from the selected language, such as `.js` for JavaScript or `.py` for Python.
 
 ## PostgreSQL + pgvector
 

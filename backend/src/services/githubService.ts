@@ -1,4 +1,4 @@
-import { GithubPushRequest, GithubPushResult } from "../types.js";
+import { GithubConnectionRequest, GithubConnectionResult, GithubPushRequest, GithubPushResult } from "../types.js";
 
 type GithubContentResponse = {
   sha?: string;
@@ -18,6 +18,19 @@ type GithubCommitResponse = {
 
 type GithubErrorResponse = {
   message?: string;
+};
+
+type GithubRepoResponse = {
+  default_branch?: string;
+  full_name?: string;
+  name?: string;
+  owner?: {
+    login?: string;
+  };
+  permissions?: {
+    push?: boolean;
+  };
+  private?: boolean;
 };
 
 async function readGithubJson<T>(response: Response): Promise<T | null> {
@@ -78,6 +91,41 @@ function formatGithubError(action: string, status: number, payload: GithubErrorR
 
 export class GithubService {
   constructor(private readonly apiBaseUrl = "https://api.github.com") {}
+
+  async testConnection(request: GithubConnectionRequest): Promise<GithubConnectionResult> {
+    const headers = createGithubHeaders(request.token);
+    const repoUrl = `${this.apiBaseUrl}/repos/${encodeURIComponent(request.owner)}/${encodeURIComponent(request.repo)}`;
+    const repoResponse = await fetch(repoUrl, {
+      headers
+    });
+    const repoPayload = await readGithubJson<GithubRepoResponse | GithubErrorResponse>(repoResponse);
+
+    if (!repoResponse.ok) {
+      throw formatGithubError("connect to repository", repoResponse.status, repoPayload as GithubErrorResponse | null);
+    }
+
+    const branchUrl = `${repoUrl}/branches/${encodeURIComponent(request.branch)}`;
+    const branchResponse = await fetch(branchUrl, {
+      headers
+    });
+    const branchPayload = await readGithubJson<GithubErrorResponse>(branchResponse);
+
+    if (!branchResponse.ok) {
+      throw formatGithubError("find branch", branchResponse.status, branchPayload);
+    }
+
+    const repo = repoPayload as GithubRepoResponse;
+
+    return {
+      owner: repo.owner?.login ?? request.owner,
+      repo: repo.name ?? request.repo,
+      branch: request.branch,
+      fullName: repo.full_name ?? `${request.owner}/${request.repo}`,
+      private: repo.private ?? false,
+      canPush: repo.permissions?.push ?? false,
+      defaultBranch: repo.default_branch ?? request.branch
+    };
+  }
 
   async pushFile(request: GithubPushRequest): Promise<GithubPushResult> {
     const headers = createGithubHeaders(request.token);

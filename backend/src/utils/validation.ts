@@ -1,4 +1,4 @@
-import { AiMode, AiStreamRequest, GithubPushRequest, JoinRoomPayload } from "../types.js";
+import { AiMode, AiStreamRequest, GithubConnectionRequest, GithubPushRequest, JoinRoomPayload } from "../types.js";
 
 const aiModes = new Set<AiMode>(["ask", "explain", "debug", "review", "tests", "refactor"]);
 
@@ -65,5 +65,27 @@ export function parseGithubPushRequest(value: unknown): GithubPushRequest | null
     path,
     message,
     content
+  };
+}
+
+export function parseGithubConnectionRequest(value: unknown): GithubConnectionRequest | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const token = readTrimmedString(value.token);
+  const owner = readTrimmedString(value.owner);
+  const repo = readTrimmedString(value.repo);
+  const branch = readTrimmedString(value.branch) ?? "main";
+
+  if (!token || !owner || !repo) {
+    return null;
+  }
+
+  return {
+    token,
+    owner,
+    repo,
+    branch
   };
 }

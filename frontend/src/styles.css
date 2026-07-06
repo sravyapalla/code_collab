@@ -443,10 +443,15 @@ textarea:focus {
 }
 
 .github-status,
-.github-link {
+.github-link,
+.github-meta {
   color: #ffd480;
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.github-meta {
+  color: #b8c3bb;
 }
 
 .github-link {

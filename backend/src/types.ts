@@ -78,3 +78,20 @@ export type GithubPushResult = {
   htmlUrl: string;
   commitSha: string;
 };
+
+export type GithubConnectionRequest = {
+  token: string;
+  owner: string;
+  repo: string;
+  branch: string;
+};
+
+export type GithubConnectionResult = {
+  owner: string;
+  repo: string;
+  branch: string;
+  fullName: string;
+  private: boolean;
+  canPush: boolean;
+  defaultBranch: string;
+};
