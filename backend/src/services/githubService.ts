@@ -45,6 +45,33 @@ function encodePath(path: string): string {
 }
 
 function formatGithubError(action: string, status: number, payload: GithubErrorResponse | null): Error {
+  const rawMessage = payload?.message ?? "";
+  const normalizedMessage = rawMessage.toLowerCase();
+
+  if (status === 401) {
+    return new Error("GitHub rejected the token. Check that the token is valid and has not expired.");
+  }
+
+  if (status === 403 && normalizedMessage.includes("resource not accessible by personal access token")) {
+    return new Error(
+      "GitHub token cannot access this repository. Select this repository when creating the token and grant Repository contents: Read and write."
+    );
+  }
+
+  if (status === 403) {
+    return new Error(
+      "GitHub refused the push. Check token repository access, Contents read/write permission, SSO authorization if applicable, and branch protection rules."
+    );
+  }
+
+  if (status === 404) {
+    return new Error("GitHub repository, branch, or file path was not found. Check owner, repository, branch, and file path.");
+  }
+
+  if (status === 409) {
+    return new Error("GitHub could not update the file because the branch changed. Refresh the page and try again.");
+  }
+
   const detail = payload?.message ? ` ${payload.message}` : "";
   return new Error(`Could not ${action} on GitHub (${status}).${detail}`);
 }

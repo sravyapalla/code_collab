@@ -81,4 +81,24 @@ describe("GithubService", () => {
       sha: "file-sha"
     });
   });
+
+  it("explains fine-grained token repository permission failures", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ message: "Resource not accessible by personal access token" }), { status: 403 })
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      new GithubService("https://api.github.test").pushFile({
+        token: "token",
+        owner: "demo",
+        repo: "repo",
+        branch: "main",
+        path: "app.js",
+        message: "Update app",
+        content: "console.log('updated');"
+      })
+    ).rejects.toThrow("Repository contents: Read and write");
+  });
 });
