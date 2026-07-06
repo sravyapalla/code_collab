@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { AiService } from "../services/aiService.js";
+import { formatAiError } from "../utils/aiErrors.js";
 import { parseAiStreamRequest } from "../utils/validation.js";
 
 function writeSse(res: { write: (value: string) => void }, event: string, data: unknown): void {
@@ -15,7 +16,7 @@ export function createAiRouter(aiService: AiService): Router {
       const messages = await aiService.listMessages(req.params.roomId.trim());
       res.json({ messages });
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : "Could not load AI messages." });
+      res.status(500).json({ message: formatAiError(error) });
     }
   });
 
@@ -24,7 +25,7 @@ export function createAiRouter(aiService: AiService): Router {
       const indexedChunks = await aiService.reindexRoom(req.params.roomId.trim());
       res.json({ indexedChunks });
     } catch (error) {
-      res.status(500).json({ message: error instanceof Error ? error.message : "Could not reindex room." });
+      res.status(500).json({ message: formatAiError(error) });
     }
   });
 
@@ -65,16 +66,17 @@ export function createAiRouter(aiService: AiService): Router {
       });
       res.end();
     } catch (error) {
+      const message = formatAiError(error);
+
       if (!res.headersSent) {
-        res.status(400).json({ message: error instanceof Error ? error.message : "AI request failed." });
+        res.status(400).json({ message });
         return;
       }
 
-      writeSse(res, "error", { message: error instanceof Error ? error.message : "AI request failed." });
+      writeSse(res, "error", { message });
       res.end();
     }
   });
 
   return router;
 }
-
