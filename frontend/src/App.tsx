@@ -662,6 +662,64 @@ export default function App() {
             ) : null}
           </div>
 
+          <div className="panel github-panel">
+            <form className="github-form" onSubmit={pushPreviewToGithub}>
+              <h2>GitHub</h2>
+              <div className="github-grid">
+                <label>
+                  Owner
+                  <input value={githubOwner} onChange={(event) => setGithubOwner(event.target.value)} placeholder="owner" />
+                </label>
+                <label>
+                  Repository
+                  <input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="repo" />
+                </label>
+                <label>
+                  Branch
+                  <input value={githubBranch} onChange={(event) => setGithubBranch(event.target.value)} placeholder="main" />
+                </label>
+                <label>
+                  File path
+                  <input value={githubPath} onChange={(event) => setGithubPath(event.target.value)} placeholder={getDefaultGithubPath(language)} />
+                </label>
+              </div>
+              <label>
+                Token
+                <input
+                  type="password"
+                  value={githubToken}
+                  onChange={(event) => setGithubToken(event.target.value)}
+                  placeholder="github_pat_..."
+                  autoComplete="off"
+                />
+              </label>
+              <label>
+                Commit message
+                <input value={githubMessage} onChange={(event) => setGithubMessage(event.target.value)} />
+              </label>
+              <button
+                type="submit"
+                disabled={
+                  isGithubPushing ||
+                  !previewCode ||
+                  !githubOwner.trim() ||
+                  !githubRepo.trim() ||
+                  !githubBranch.trim() ||
+                  !githubPath.trim() ||
+                  !githubToken.trim()
+                }
+              >
+                {isGithubPushing ? "Pushing" : previewCode ? "Push preview to GitHub" : "Preview code first"}
+              </button>
+              {githubStatus ? <p className="github-status">{githubStatus}</p> : null}
+              {githubResult ? (
+                <a className="github-link" href={githubResult.htmlUrl} target="_blank" rel="noreferrer">
+                  Open on GitHub
+                </a>
+              ) : null}
+            </form>
+          </div>
+
           <div className="panel">
             <h2>Language</h2>
             <select value={language} onChange={(event) => updateLanguage(event.target.value)}>
@@ -795,60 +853,6 @@ export default function App() {
                   Close
                 </button>
               </div>
-              <form className="github-form" onSubmit={pushPreviewToGithub}>
-                <h2>GitHub Push</h2>
-                <div className="github-grid">
-                  <label>
-                    Owner
-                    <input value={githubOwner} onChange={(event) => setGithubOwner(event.target.value)} placeholder="owner" />
-                  </label>
-                  <label>
-                    Repository
-                    <input value={githubRepo} onChange={(event) => setGithubRepo(event.target.value)} placeholder="repo" />
-                  </label>
-                  <label>
-                    Branch
-                    <input value={githubBranch} onChange={(event) => setGithubBranch(event.target.value)} placeholder="main" />
-                  </label>
-                  <label>
-                    File path
-                    <input value={githubPath} onChange={(event) => setGithubPath(event.target.value)} placeholder={getDefaultGithubPath(language)} />
-                  </label>
-                </div>
-                <label>
-                  Token
-                  <input
-                    type="password"
-                    value={githubToken}
-                    onChange={(event) => setGithubToken(event.target.value)}
-                    placeholder="github_pat_..."
-                    autoComplete="off"
-                  />
-                </label>
-                <label>
-                  Commit message
-                  <input value={githubMessage} onChange={(event) => setGithubMessage(event.target.value)} />
-                </label>
-                <button
-                  type="submit"
-                  disabled={
-                    isGithubPushing ||
-                    !githubOwner.trim() ||
-                    !githubRepo.trim() ||
-                    !githubBranch.trim() ||
-                    !githubPath.trim() ||
-                    !githubToken.trim()
-                  }
-                >
-                  {isGithubPushing ? "Pushing" : "Push to GitHub"}
-                </button>
-                {githubStatus ? <p className="github-status">{githubStatus}</p> : null}
-                {githubResult ? (
-                  <a className="github-link" href={githubResult.htmlUrl} target="_blank" rel="noreferrer">
-                    Open on GitHub
-                  </a>
-                ) : null}
-              </form>
               <pre>{previewCode}</pre>
               <div className="preview-actions">
                 <button type="button" onClick={insertPreviewCode}>
