@@ -795,16 +795,6 @@ export default function App() {
                   Close
                 </button>
               </div>
-              <pre>{previewCode}</pre>
-              <div className="preview-actions">
-                <button type="button" onClick={insertPreviewCode}>
-                  Insert into editor
-                </button>
-                <button type="button" className="secondary-button" onClick={appendPreviewCode}>
-                  Append to editor
-                </button>
-              </div>
-
               <form className="github-form" onSubmit={pushPreviewToGithub}>
                 <h2>GitHub Push</h2>
                 <div className="github-grid">
@@ -859,6 +849,15 @@ export default function App() {
                   </a>
                 ) : null}
               </form>
+              <pre>{previewCode}</pre>
+              <div className="preview-actions">
+                <button type="button" onClick={insertPreviewCode}>
+                  Insert into editor
+                </button>
+                <button type="button" className="secondary-button" onClick={appendPreviewCode}>
+                  Append to editor
+                </button>
+              </div>
             </div>
           ) : null}
         </aside>
