@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import { AppConfig } from "../config.js";
 
@@ -93,7 +94,78 @@ export class OpenAiProvider implements AiProvider {
   }
 }
 
+export class GeminiProvider implements AiProvider {
+  readonly providerName = "gemini";
+  readonly model: string;
+  readonly isConfigured = true;
+  private readonly embeddingModel: string;
+  private readonly client: GoogleGenAI;
+
+  constructor(config: AppConfig) {
+    if (!config.geminiApiKey) {
+      throw new Error("Gemini API key is required for GeminiProvider.");
+    }
+
+    this.model = config.geminiModel;
+    this.embeddingModel = config.geminiEmbeddingModel;
+    this.client = new GoogleGenAI({
+      apiKey: config.geminiApiKey
+    });
+  }
+
+  async embedTexts(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) {
+      return [];
+    }
+
+    const response = await this.client.models.embedContent({
+      model: this.embeddingModel,
+      contents: texts,
+      config: {
+        outputDimensionality: 1536
+      }
+    });
+
+    return (response.embeddings ?? []).map((embedding) => embedding.values ?? []);
+  }
+
+  async *streamResponse(input: AiResponseInput): AsyncGenerator<string> {
+    const stream = await this.client.models.generateContentStream({
+      model: this.model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `${input.systemPrompt}\n\n${input.userPrompt}`
+            }
+          ]
+        }
+      ],
+      config: {
+        thinkingConfig: {
+          thinkingBudget: 0
+        }
+      }
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.text) {
+        yield chunk.text;
+      }
+    }
+  }
+}
+
 export function createAiProvider(config: AppConfig): AiProvider {
+  if (config.aiProvider === "gemini") {
+    if (!config.geminiApiKey) {
+      return new DisabledAiProvider();
+    }
+
+    return new GeminiProvider(config);
+  }
+
   if (!config.openAiApiKey) {
     return new DisabledAiProvider();
   }

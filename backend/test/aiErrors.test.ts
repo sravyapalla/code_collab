@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { formatAiError } from "../src/utils/aiErrors.js";
 
 describe("formatAiError", () => {
-  it("turns OpenAI quota errors into a setup-focused message", () => {
+  it("turns provider quota errors into a setup-focused message", () => {
     const message = formatAiError({
       status: 429,
       error: {
@@ -11,13 +11,13 @@ describe("formatAiError", () => {
       }
     });
 
-    expect(message).toContain("OpenAI quota is exhausted");
-    expect(message).toContain("OPENAI_API_KEY");
+    expect(message).toContain("AI provider quota is exhausted");
+    expect(message).toContain("provider key");
     expect(message).not.toContain("You exceeded your current quota");
   });
 
   it("turns invalid key errors into a setup-focused message", () => {
-    expect(formatAiError({ status: 401, code: "invalid_api_key" })).toContain("OpenAI rejected");
+    expect(formatAiError({ status: 401, code: "invalid_api_key" })).toContain("AI provider rejected");
   });
 
   it("keeps unrelated errors intact", () => {

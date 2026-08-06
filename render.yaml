@@ -34,6 +34,14 @@ services:
         value: gpt-5.5
       - key: OPENAI_EMBEDDING_MODEL
         value: text-embedding-3-small
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.6-flash
+      - key: GEMINI_EMBEDDING_MODEL
+        value: gemini-embedding-2
       - key: AI_MAX_INPUT_CHARS
         value: "24000"
       - key: AI_RATE_LIMIT_PER_ROOM

@@ -4,9 +4,13 @@ export type AppConfig = {
   serveFrontend: boolean;
   databaseUrl?: string;
   databaseSsl: boolean;
+  aiProvider: "openai" | "gemini";
   openAiApiKey?: string;
   openAiModel: string;
   openAiEmbeddingModel: string;
+  geminiApiKey?: string;
+  geminiModel: string;
+  geminiEmbeddingModel: string;
   aiMaxInputChars: number;
   aiRateLimitPerRoom: number;
   aiRateLimitWindowMs: number;
@@ -43,6 +47,10 @@ function readCsv(name: string): string[] {
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+function readAiProvider(): AppConfig["aiProvider"] {
+  return process.env.AI_PROVIDER?.toLowerCase() === "gemini" ? "gemini" : "openai";
 }
 
 function readFrontendOrigins(): string[] {
@@ -91,9 +99,13 @@ export function readConfig(): AppConfig {
     serveFrontend: readBoolean("SERVE_FRONTEND", process.env.NODE_ENV === "production"),
     databaseUrl,
     databaseSsl: inferDatabaseSsl(databaseUrl),
+    aiProvider: readAiProvider(),
     openAiApiKey: process.env.OPENAI_API_KEY,
     openAiModel: process.env.OPENAI_MODEL ?? "gpt-5.5",
     openAiEmbeddingModel: process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small",
+    geminiApiKey: process.env.GEMINI_API_KEY,
+    geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.6-flash",
+    geminiEmbeddingModel: process.env.GEMINI_EMBEDDING_MODEL ?? "gemini-embedding-2",
     aiMaxInputChars: readInteger("AI_MAX_INPUT_CHARS", 24000),
     aiRateLimitPerRoom: readInteger("AI_RATE_LIMIT_PER_ROOM", 12),
     aiRateLimitWindowMs: readInteger("AI_RATE_LIMIT_WINDOW_MS", 60000),

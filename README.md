@@ -115,6 +115,10 @@ APP_HOST=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.5
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+AI_PROVIDER=openai
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 AI_MAX_INPUT_CHARS=24000
 AI_RATE_LIMIT_PER_ROOM=12
 AI_RATE_LIMIT_WINDOW_MS=60000
@@ -127,9 +131,9 @@ Frontend:
 VITE_BACKEND_URL=http://localhost:8000
 ```
 
-If `DATABASE_URL` is omitted, the backend uses an in-memory repository. If `OPENAI_API_KEY` is omitted, the AI panel still streams a setup message but embeddings and model answers are disabled.
+If `DATABASE_URL` is omitted, the backend uses an in-memory repository. If the configured AI provider key is omitted, the AI panel still streams a setup message but embeddings and model answers are disabled.
 
-To change the AI key locally, edit `backend/.env`, set `OPENAI_API_KEY=sk-...`, and restart `npm run dev:backend`. To change the deployed app key, update `OPENAI_API_KEY` in the Render `code-collab` service environment and restart or redeploy the service. A `429` quota/billing error means the configured key's OpenAI project or organization needs active quota/billing, or a different key with available quota.
+To use OpenAI, set `AI_PROVIDER=openai`, edit `backend/.env`, set `OPENAI_API_KEY=sk-...`, and restart `npm run dev:backend`. To use Gemini, set `AI_PROVIDER=gemini` and `GEMINI_API_KEY=...`. To change the deployed app key, update the matching provider key in the Render `code-collab` service environment and restart or redeploy the service. A `429` quota/billing error means the configured provider account needs active quota/billing, or a different key with available quota.
 
 The GitHub push action uses the token entered in the preview panel for that request only. Use a GitHub token that can read and write repository contents for the selected repository.
 Use **Test connection** in the GitHub panel to verify repository and branch access before pushing. If the file path has no extension, the app appends one from the selected language, such as `.js` for JavaScript or `.py` for Python.
@@ -169,6 +173,10 @@ OPENAI_API_KEY=your_openai_api_key
 SERVE_FRONTEND=true
 DATABASE_URL=auto-filled from code-collab-db
 DATABASE_SSL=false
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 OPENAI_MODEL=gpt-5.5
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
@@ -179,7 +187,7 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 https://your-render-service.onrender.com/health
 ```
 
-The health response should show `storage: "postgres"` because the Blueprint wires `DATABASE_URL` from `code-collab-db`, and `ai: "openai"` when `OPENAI_API_KEY` is set.
+The health response should show `storage: "postgres"` because the Blueprint wires `DATABASE_URL` from `code-collab-db`, and `ai: "gemini"` when `AI_PROVIDER=gemini` and `GEMINI_API_KEY` is set.
 
 This deployment is currently live at:
 

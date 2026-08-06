@@ -48,7 +48,7 @@ export function formatAiError(error: unknown): string {
     normalizedMessage.includes("exceeded your current quota") ||
     (normalizedMessage.includes("quota") && normalizedMessage.includes("billing"))
   ) {
-    return "OpenAI quota is exhausted for the configured API key. Update OPENAI_API_KEY on the backend to a key with active billing/quota, then restart or redeploy the backend.";
+    return "AI provider quota is exhausted for the configured API key. Update the backend provider key to one with active billing/quota, then restart or redeploy the backend.";
   }
 
   if (
@@ -57,7 +57,7 @@ export function formatAiError(error: unknown): string {
     normalizedMessage.includes("incorrect api key") ||
     normalizedMessage.includes("invalid api key")
   ) {
-    return "OpenAI rejected the configured API key. Update OPENAI_API_KEY on the backend, then restart or redeploy the backend.";
+    return "AI provider rejected the configured API key. Update the backend provider key, then restart or redeploy the backend.";
   }
 
   return message || "AI request failed.";
