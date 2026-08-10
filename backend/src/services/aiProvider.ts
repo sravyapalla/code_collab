@@ -141,12 +141,7 @@ export class GeminiProvider implements AiProvider {
             }
           ]
         }
-      ],
-      config: {
-        thinkingConfig: {
-          thinkingBudget: 0
-        }
-      }
+      ]
     });
 
     for await (const chunk of stream) {

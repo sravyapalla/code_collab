@@ -20,6 +20,18 @@ describe("formatAiError", () => {
     expect(formatAiError({ status: 401, code: "invalid_api_key" })).toContain("AI provider rejected");
   });
 
+  it("turns nested Gemini invalid argument errors into a setup-focused message", () => {
+    const message = formatAiError({
+      status: 400,
+      error: {
+        message: '{\n "error": {\n "code": 400,\n "message": "Request contains an invalid argument.",\n "status": "INVALID_ARGUMENT"\n }\n}\n'
+      }
+    });
+
+    expect(message).toContain("AI provider rejected the request configuration");
+    expect(message).not.toContain("Request contains an invalid argument");
+  });
+
   it("keeps unrelated errors intact", () => {
     expect(formatAiError(new Error("Room not found."))).toBe("Room not found.");
   });
